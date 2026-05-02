@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bilibili Downloader</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Bilibili Downloader</p>
+          <h1>搜索 B 站视频并下载到指定目录</h1>
+          <p class="lede">
+            输入视频名称，选中结果后即可发起下载。仅建议下载你有权保存的内容，并遵守 Bilibili 的版权规则与使用条款。
+          </p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <form id="search-form" class="search-bar">
+          <input id="query" name="query" type="text" placeholder="例如：火影忍者ol" autocomplete="off" />
+          <button type="submit">搜索</button>
+        </form>
+        <p id="search-status" class="status-line"></p>
+        <div id="results" class="results"></div>
+      </section>
+
+      <section class="panel panel-split">
+        <div>
+          <h2>下载配置</h2>
+          <label class="field">
+            <span>保存目录</span>
+            <input id="output-dir" type="text" value="downloads" />
+          </label>
+          <label class="field">
+            <span>自定义文件名</span>
+            <input id="file-name" type="text" placeholder="留空则使用视频标题" />
+          </label>
+          <label class="field">
+            <span>Cookies 来源</span>
+            <select id="cookies-browser">
+              <option value="none">不使用</option>
+              <option value="chrome">Chrome</option>
+              <option value="edge">Edge</option>
+              <option value="firefox">Firefox</option>
+            </select>
+          </label>
+          <p class="hint">
+            部分视频需要登录态或更完整的浏览器指纹。下载失败时，优先尝试选择你平时登录 B 站的浏览器。
+          </p>
+        </div>
+
+        <div>
+          <h2>下载任务</h2>
+          <div id="jobs" class="jobs empty">还没有下载任务</div>
+        </div>
+      </section>
+    </main>
+
+    <template id="result-template">
+      <article class="result-card">
+        <div class="result-meta">
+          <h3></h3>
+          <p class="muted author"></p>
+          <p class="muted description"></p>
+        </div>
+        <div class="result-actions">
+          <p class="muted duration"></p>
+          <button type="button">下载这个视频</button>
+        </div>
+      </article>
+    </template>
+
+    <template id="job-template">
+      <article class="job-card">
+        <div class="job-head">
+          <h3></h3>
+          <span class="badge"></span>
+        </div>
+        <p class="muted progress"></p>
+        <p class="muted file"></p>
+        <p class="error"></p>
+      </article>
+    </template>
+
+    <script src="/static/app.js"></script>
+  </body>
+  </html>

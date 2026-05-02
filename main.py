@@ -1,0 +1,308 @@
+from __future__ import annotations
+
+import html
+import re
+import sys
+import threading
+import uuid
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import requests
+import yt_dlp
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+
+
+def get_base_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS"))
+    return Path(__file__).resolve().parent
+
+
+BASE_DIR = get_base_dir()
+STATIC_DIR = BASE_DIR / "static"
+DEFAULT_DOWNLOAD_DIR = Path.home() / "Downloads" / "bilibili-downloader"
+SEARCH_API = "https://api.bilibili.com/x/web-interface/search/type"
+SEARCH_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://search.bilibili.com/",
+}
+TITLE_TAG_RE = re.compile(r"<[^>]+>")
+SAFE_NAME_RE = re.compile(r'[\\/:*?"<>|]+')
+
+
+app = FastAPI(title="Bilibili Downloader")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@dataclass
+class DownloadJob:
+    id: str
+    title: str
+    url: str
+    output_dir: str
+    file_name: str | None
+    browser: str | None
+    status: str = "queued"
+    progress: str = "Waiting"
+    percent: float = 0.0
+    filename: str | None = None
+    error: str | None = None
+    downloaded_path: str | None = None
+    created_order: int = field(default=0)
+
+
+class SearchResult(BaseModel):
+    bvid: str
+    title: str
+    author: str
+    description: str
+    duration: str
+    play: int | None
+    pubdate: int | None
+    url: str
+    pic: str | None
+
+
+class DownloadRequest(BaseModel):
+    url: str
+    title: str = Field(min_length=1, max_length=300)
+    output_dir: str = Field(min_length=1)
+    file_name: str | None = Field(default=None, max_length=200)
+    cookies_browser: str | None = Field(default=None, max_length=20)
+
+
+class JobResponse(BaseModel):
+    id: str
+    title: str
+    status: str
+    progress: str
+    percent: float
+    output_dir: str
+    filename: str | None
+    downloaded_path: str | None
+    error: str | None
+
+
+jobs: dict[str, DownloadJob] = {}
+jobs_lock = threading.Lock()
+job_counter = 0
+
+
+def strip_html(text: str | None) -> str:
+    if not text:
+        return ""
+    clean = TITLE_TAG_RE.sub("", text)
+    return html.unescape(clean).strip()
+
+
+def sanitize_filename(name: str) -> str:
+    cleaned = SAFE_NAME_RE.sub("_", name).strip().rstrip(".")
+    return cleaned[:180] or "video"
+
+
+def bilibili_search(keyword: str, page_size: int = 12) -> list[SearchResult]:
+    params = {
+        "search_type": "video",
+        "keyword": keyword,
+        "page": 1,
+        "page_size": page_size,
+    }
+    response = requests.get(SEARCH_API, params=params, headers=SEARCH_HEADERS, timeout=20)
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get("code") != 0:
+        raise HTTPException(status_code=502, detail=f"Bilibili search failed: {payload.get('message')}")
+
+    results = []
+    for item in payload.get("data", {}).get("result", []):
+        bvid = item.get("bvid")
+        if not bvid:
+            continue
+        results.append(
+            SearchResult(
+                bvid=bvid,
+                title=strip_html(item.get("title")),
+                author=item.get("author") or "",
+                description=strip_html(item.get("description")),
+                duration=item.get("duration") or "",
+                play=item.get("play"),
+                pubdate=item.get("pubdate"),
+                url=f"https://www.bilibili.com/video/{bvid}",
+                pic=item.get("pic"),
+            )
+        )
+    return results
+
+
+def get_job(job_id: str) -> DownloadJob:
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+def set_job_fields(job_id: str, **fields: Any) -> None:
+    with jobs_lock:
+        job = jobs[job_id]
+        for key, value in fields.items():
+            setattr(job, key, value)
+
+
+def make_job_response(job: DownloadJob) -> JobResponse:
+    return JobResponse(
+        id=job.id,
+        title=job.title,
+        status=job.status,
+        progress=job.progress,
+        percent=job.percent,
+        output_dir=job.output_dir,
+        filename=job.filename,
+        downloaded_path=job.downloaded_path,
+        error=job.error,
+    )
+
+
+def build_ydl_options(job: DownloadJob) -> dict[str, Any]:
+    target_dir = Path(job.output_dir).expanduser().resolve()
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    base_name = sanitize_filename(job.file_name or job.title)
+    options: dict[str, Any] = {
+        "outtmpl": str(target_dir / f"{base_name}.%(ext)s"),
+        "format": "bestvideo*+bestaudio/best",
+        "merge_output_format": "mp4",
+        "noplaylist": True,
+        "quiet": True,
+        "no_warnings": True,
+    }
+
+    if job.browser and job.browser != "none":
+        options["cookiesfrombrowser"] = (job.browser,)
+
+    def progress_hook(payload: dict[str, Any]) -> None:
+        status = payload.get("status")
+        if status == "downloading":
+            total = payload.get("total_bytes") or payload.get("total_bytes_estimate") or 0
+            downloaded = payload.get("downloaded_bytes") or 0
+            percent = round((downloaded / total) * 100, 1) if total else 0.0
+            progress_text = payload.get("_percent_str", "").strip() or f"{percent}%"
+            set_job_fields(
+                job.id,
+                status="downloading",
+                percent=percent,
+                progress=progress_text,
+                filename=payload.get("filename"),
+            )
+        elif status == "finished":
+            filename = payload.get("filename")
+            set_job_fields(
+                job.id,
+                status="processing",
+                percent=100.0,
+                progress="Download finished, finalizing file",
+                filename=filename,
+            )
+
+    options["progress_hooks"] = [progress_hook]
+    return options
+
+
+def run_download(job_id: str) -> None:
+    job = get_job(job_id)
+    set_job_fields(job.id, status="starting", progress="Preparing download")
+    try:
+        options = build_ydl_options(job)
+        with yt_dlp.YoutubeDL(options) as ydl:
+            info = ydl.extract_info(job.url, download=True)
+            final_path = ydl.prepare_filename(info)
+
+        actual_path = Path(final_path)
+        if actual_path.suffix.lower() != ".mp4":
+            mp4_candidate = actual_path.with_suffix(".mp4")
+            if mp4_candidate.exists():
+                actual_path = mp4_candidate
+
+        set_job_fields(
+            job.id,
+            status="completed",
+            progress="Completed",
+            percent=100.0,
+            downloaded_path=str(actual_path),
+            filename=actual_path.name,
+            error=None,
+        )
+    except Exception as exc:
+        set_job_fields(
+            job.id,
+            status="failed",
+            progress="Failed",
+            error=str(exc),
+        )
+
+
+@app.get("/", response_class=HTMLResponse)
+def index() -> str:
+    return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+
+
+@app.get("/api/search", response_model=list[SearchResult])
+def search_videos(q: str) -> list[SearchResult]:
+    query = q.strip()
+    if len(query) < 2:
+        raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
+    return bilibili_search(query)
+
+
+@app.post("/api/download", response_model=JobResponse)
+def create_download(request: DownloadRequest) -> JobResponse:
+    global job_counter
+
+    output_dir = Path(request.output_dir).expanduser()
+    if not output_dir.is_absolute():
+        output_dir = (DEFAULT_DOWNLOAD_DIR / output_dir).resolve()
+
+    job_id = str(uuid.uuid4())
+    with jobs_lock:
+        job_counter += 1
+        job = DownloadJob(
+            id=job_id,
+            title=request.title,
+            url=request.url,
+            output_dir=str(output_dir),
+            file_name=request.file_name.strip() if request.file_name else None,
+            browser=request.cookies_browser,
+            created_order=job_counter,
+        )
+        jobs[job_id] = job
+
+    thread = threading.Thread(target=run_download, args=(job_id,), daemon=True)
+    thread.start()
+    return make_job_response(job)
+
+
+@app.get("/api/jobs/{job_id}", response_model=JobResponse)
+def get_download_job(job_id: str) -> JobResponse:
+    return make_job_response(get_job(job_id))
+
+
+@app.get("/api/jobs", response_model=list[JobResponse])
+def list_jobs() -> list[JobResponse]:
+    with jobs_lock:
+        ordered = sorted(jobs.values(), key=lambda item: item.created_order, reverse=True)
+    return [make_job_response(job) for job in ordered]
