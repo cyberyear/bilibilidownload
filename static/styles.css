@@ -199,6 +199,32 @@ button:hover {
   color: var(--error);
 }
 
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.pagination button {
+  padding: 10px 20px;
+  font-size: 0.95rem;
+}
+
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.pagination span {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
 @media (max-width: 860px) {
   .panel-split,
   .search-bar,

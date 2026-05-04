@@ -129,6 +129,14 @@ class DownloadRequest(BaseModel):
     cookies_browser: str | None = Field(default=None, max_length=20)
 
 
+class SearchResponse(BaseModel):
+    results: list[SearchResult]
+    page: int
+    page_size: int
+    total: int
+    has_more: bool
+
+
 class JobResponse(BaseModel):
     id: str
     title: str
@@ -158,7 +166,7 @@ def sanitize_filename(name: str) -> str:
     return cleaned[:180] or "video"
 
 
-def bilibili_search(keyword: str, page_size: int = 12) -> list[SearchResult]:
+def bilibili_search(keyword: str, page: int = 1, page_size: int = 12) -> dict:
     global _last_search_time
 
     # 限制请求频率，避免触发风控
@@ -170,7 +178,7 @@ def bilibili_search(keyword: str, page_size: int = 12) -> list[SearchResult]:
     params = {
         "search_type": "video",
         "keyword": keyword,
-        "page": 1,
+        "page": page,
         "page_size": page_size,
     }
 
@@ -209,8 +217,9 @@ def bilibili_search(keyword: str, page_size: int = 12) -> list[SearchResult]:
             else:
                 raise HTTPException(status_code=502, detail=f"B站搜索失败: {error_msg}")
 
+        data = payload.get("data", {})
         results = []
-        for item in payload.get("data", {}).get("result", []):
+        for item in data.get("result", []):
             bvid = item.get("bvid")
             if not bvid:
                 continue
@@ -227,7 +236,17 @@ def bilibili_search(keyword: str, page_size: int = 12) -> list[SearchResult]:
                     pic=item.get("pic"),
                 )
             )
-        return results
+
+        total = data.get("numResults", 0)
+        has_more = page * page_size < total
+
+        return {
+            "results": results,
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "has_more": has_more,
+        }
 
     except requests.exceptions.Timeout:
         raise HTTPException(status_code=504, detail="搜索超时，请稍后再试")
@@ -351,12 +370,13 @@ def index() -> str:
     return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
-@app.get("/api/search", response_model=list[SearchResult])
-def search_videos(q: str) -> list[SearchResult]:
+@app.get("/api/search", response_model=SearchResponse)
+def search_videos(q: str, page: int = 1) -> SearchResponse:
     query = q.strip()
     if len(query) < 2:
         raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
-    return bilibili_search(query)
+    result = bilibili_search(query, page=page)
+    return SearchResponse(**result)
 
 
 @app.post("/api/download", response_model=JobResponse)
