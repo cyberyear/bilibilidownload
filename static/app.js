@@ -22,6 +22,7 @@ document.getElementById("search-form").addEventListener("submit", async (event) 
   }
 
   searchStatus.textContent = "正在搜索...";
+  searchStatus.style.color = "#666";
   resultsContainer.innerHTML = "";
 
   try {
@@ -32,9 +33,26 @@ document.getElementById("search-form").addEventListener("submit", async (event) 
     }
     const items = await response.json();
     renderResults(items);
-    searchStatus.textContent = items.length ? `找到 ${items.length} 条结果` : "没有找到结果";
+    searchStatus.style.color = "#333";
+    if (items.length === 0) {
+      searchStatus.textContent = "没有找到结果，请尝试其他关键词";
+    } else {
+      searchStatus.textContent = `找到 ${items.length} 条结果`;
+    }
   } catch (error) {
-    searchStatus.textContent = error.message;
+    searchStatus.style.color = "#e74c3c";
+    searchStatus.textContent = `搜索失败: ${error.message}`;
+    // 显示重试提示
+    if (error.message.includes("风控") || error.message.includes("频繁") || error.message.includes("超时")) {
+      resultsContainer.innerHTML = `
+        <div style="text-align: center; padding: 20px; color: #666;">
+          <p>💡 建议：</p>
+          <p>1. 等待几秒后重试</p>
+          <p>2. 更换搜索关键词</p>
+          <p>3. 检查网络连接</p>
+        </div>
+      `;
+    }
   }
 });
 

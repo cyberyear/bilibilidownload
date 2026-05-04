@@ -4,10 +4,12 @@ import html
 import re
 import sys
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import requests
 import yt_dlp
@@ -28,13 +30,54 @@ BASE_DIR = get_base_dir()
 STATIC_DIR = BASE_DIR / "static"
 DEFAULT_DOWNLOAD_DIR = Path.home() / "Downloads" / "bilibili-downloader"
 SEARCH_API = "https://api.bilibili.com/x/web-interface/search/type"
+SUGGEST_API = "https://s.search.bilibili.com/main/suggest"
+
+# 更完整的请求头，模拟真实浏览器
 SEARCH_HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     ),
-    "Referer": "https://search.bilibili.com/",
+    "Referer": "https://www.bilibili.com/",
+    "Origin": "https://www.bilibili.com",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"macOS"',
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-site",
 }
+
+# 生成随机 buvid（B站设备指纹）
+def generate_buvid() -> str:
+    import random
+    import string
+    chars = string.hexdigits.lower()
+    return f"XX{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}-{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}-{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}-{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}-{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}infoc"
+
+# 会话级别的 Cookie 缓存
+_search_session: requests.Session | None = None
+_last_search_time: float = 0
+
+def get_search_session() -> requests.Session:
+    """获取或创建带 Cookie 的搜索会话"""
+    global _search_session
+    if _search_session is None:
+        _search_session = requests.Session()
+        _search_session.headers.update(SEARCH_HEADERS)
+        # 设置必要的 Cookie
+        buvid = generate_buvid()
+        _search_session.cookies.set("buvid3", buvid, domain=".bilibili.com")
+        _search_session.cookies.set("buvid4", f"{buvid.split('-')[0]}-{buvid.split('-')[1]}", domain=".bilibili.com")
+        _search_session.cookies.set("_uuid", f"{buvid.split('-')[0]}-{buvid.split('-')[1]}", domain=".bilibili.com")
+        # 添加 fingerprint
+        _search_session.cookies.set("b_nut", str(int(time.time())), domain=".bilibili.com")
+        _search_session.cookies.set("b_lsid", generate_buvid()[:20], domain=".bilibili.com")
+    return _search_session
 TITLE_TAG_RE = re.compile(r"<[^>]+>")
 SAFE_NAME_RE = re.compile(r'[\\/:*?"<>|]+')
 
@@ -116,37 +159,84 @@ def sanitize_filename(name: str) -> str:
 
 
 def bilibili_search(keyword: str, page_size: int = 12) -> list[SearchResult]:
+    global _last_search_time
+
+    # 限制请求频率，避免触发风控
+    elapsed = time.time() - _last_search_time
+    if elapsed < 1.0:
+        time.sleep(1.0 - elapsed)
+    _last_search_time = time.time()
+
     params = {
         "search_type": "video",
         "keyword": keyword,
         "page": 1,
         "page_size": page_size,
     }
-    response = requests.get(SEARCH_API, params=params, headers=SEARCH_HEADERS, timeout=20)
-    response.raise_for_status()
-    payload = response.json()
-    if payload.get("code") != 0:
-        raise HTTPException(status_code=502, detail=f"Bilibili search failed: {payload.get('message')}")
 
-    results = []
-    for item in payload.get("data", {}).get("result", []):
-        bvid = item.get("bvid")
-        if not bvid:
-            continue
-        results.append(
-            SearchResult(
-                bvid=bvid,
-                title=strip_html(item.get("title")),
-                author=item.get("author") or "",
-                description=strip_html(item.get("description")),
-                duration=item.get("duration") or "",
-                play=item.get("play"),
-                pubdate=item.get("pubdate"),
-                url=f"https://www.bilibili.com/video/{bvid}",
-                pic=item.get("pic"),
+    session = get_search_session()
+
+    try:
+        response = session.get(SEARCH_API, params=params, timeout=20)
+
+        # 如果遇到 412 风控，尝试重建会话
+        if response.status_code == 412 or "412" in response.text:
+            global _search_session
+            _search_session = None
+            session = get_search_session()
+            time.sleep(2)  # 等待一段时间再重试
+            response = session.get(SEARCH_API, params=params, timeout=20)
+
+        response.raise_for_status()
+
+        # 检查是否返回了 HTML 错误页面
+        content_type = response.headers.get("Content-Type", "")
+        if "text/html" in content_type:
+            raise HTTPException(
+                status_code=503,
+                detail="B站搜索服务暂时不可用，请稍后再试（触发风控限制）"
             )
-        )
-    return results
+
+        payload = response.json()
+
+        if payload.get("code") != 0:
+            error_msg = payload.get("message", "未知错误")
+            # 常见错误码处理
+            if payload.get("code") == -400:
+                raise HTTPException(status_code=400, detail=f"请求参数错误: {error_msg}")
+            elif payload.get("code") == -412:
+                raise HTTPException(status_code=503, detail="请求过于频繁，请稍后再试")
+            else:
+                raise HTTPException(status_code=502, detail=f"B站搜索失败: {error_msg}")
+
+        results = []
+        for item in payload.get("data", {}).get("result", []):
+            bvid = item.get("bvid")
+            if not bvid:
+                continue
+            results.append(
+                SearchResult(
+                    bvid=bvid,
+                    title=strip_html(item.get("title")),
+                    author=item.get("author") or "",
+                    description=strip_html(item.get("description")),
+                    duration=item.get("duration") or "",
+                    play=item.get("play"),
+                    pubdate=item.get("pubdate"),
+                    url=f"https://www.bilibili.com/video/{bvid}",
+                    pic=item.get("pic"),
+                )
+            )
+        return results
+
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="搜索超时，请稍后再试")
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=503, detail="网络连接失败，请检查网络")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"搜索出错: {str(e)}")
 
 
 def get_job(job_id: str) -> DownloadJob:
