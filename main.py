@@ -376,7 +376,13 @@ def search_videos(q: str, page: int = 1) -> SearchResponse:
     if len(query) < 2:
         raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
     result = bilibili_search(query, page=page)
-    return SearchResponse(**result)
+    return SearchResponse(
+        results=result["results"],
+        page=result["page"],
+        page_size=result["page_size"],
+        total=result["total"],
+        has_more=result["has_more"],
+    )
 
 
 @app.post("/api/download", response_model=JobResponse)
