@@ -1,6 +1,6 @@
 # Bilibili Downloader
 
-## Start
+## Start (Windows)
 
 Install dependencies:
 
@@ -8,7 +8,7 @@ Install dependencies:
 py -3.11 -m pip install -r E:\auto360\requirements.txt
 ```
 
-Run the web app:
+Run the web app (Windows):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File E:\auto360\run_app.ps1
@@ -17,7 +17,7 @@ powershell -ExecutionPolicy Bypass -File E:\auto360\run_app.ps1
 Then open:
 
 ```text
-http://127.0.0.1:8000
+http://localhost:8000
 ```
 
 ## Build Desktop EXE

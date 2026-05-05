@@ -51,19 +51,25 @@ sudo apt install ffmpeg
 
 ## 启动方式
 
-### 方式一：命令行启动
+### 方式一：Windows 脚本启动（推荐）
+
+```powershell
+powershell -ExecutionPolicy Bypass -File E:\auto360\run_app.ps1
+```
+
+### 方式二：命令行启动
 
 ```bash
 python3 -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-### 方式二：桌面启动器（自动打开浏览器）
+### 方式三：桌面启动器（自动打开浏览器）
 
 ```bash
 python3 desktop_launcher.py
 ```
 
-启动后，在浏览器中访问：**http://127.0.0.1:8000**
+启动后，在浏览器中访问：**http://localhost:8000**
 
 ## 使用说明
 
