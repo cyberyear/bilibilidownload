@@ -21,6 +21,11 @@
       <section class="panel">
         <form id="search-form" class="search-bar">
           <input id="query" name="query" type="text" placeholder="例如：火影忍者ol" autocomplete="off" />
+          <select id="search-order">
+            <option value="totalrank">综合排序</option>
+            <option value="click">播放量</option>
+            <option value="pubdate">发布时间</option>
+          </select>
           <button type="submit">搜索</button>
         </form>
         <p id="search-status" class="status-line"></p>

@@ -168,7 +168,7 @@ def sanitize_filename(name: str) -> str:
     return cleaned[:180] or "video"
 
 
-def bilibili_search(keyword: str, page: int = 1, page_size: int = 12) -> dict:
+def bilibili_search(keyword: str, page: int = 1, page_size: int = 12, order: str = "totalrank") -> dict:
     global _last_search_time
 
     # 限制请求频率，避免触发风控
@@ -182,6 +182,7 @@ def bilibili_search(keyword: str, page: int = 1, page_size: int = 12) -> dict:
         "keyword": keyword,
         "page": page,
         "page_size": page_size,
+        "order": order,  # totalrank(综合), click(播放量), pubdate(发布日期)
     }
 
     session = get_search_session()
@@ -386,11 +387,11 @@ def index() -> str:
 
 
 @app.get("/api/search", response_model=SearchResponse)
-def search_videos(q: str, page: int = 1) -> SearchResponse:
+def search_videos(q: str, page: int = 1, order: str = "totalrank") -> SearchResponse:
     query = q.strip()
     if len(query) < 1:
         raise HTTPException(status_code=400, detail="请输入搜索关键词")
-    result = bilibili_search(query, page=page)
+    result = bilibili_search(query, page=page, order=order)
     return SearchResponse(
         results=result["results"],
         page=result["page"],

@@ -4,9 +4,11 @@ const state = {
   currentQuery: "",
   currentPage: 1,
   hasMore: false,
+  currentOrder: "totalrank",
 };
 
 const queryInput = document.getElementById("query");
+const orderSelect = document.getElementById("search-order");
 const outputDirInput = document.getElementById("output-dir");
 const fileNameInput = document.getElementById("file-name");
 const browserSelect = document.getElementById("cookies-browser");
@@ -30,7 +32,17 @@ document.getElementById("search-form").addEventListener("submit", async (event) 
 
   state.currentQuery = query;
   state.currentPage = 1;
+  state.currentOrder = orderSelect.value;
   await doSearch();
+});
+
+// 排序方式变化时重新搜索
+orderSelect.addEventListener("change", async () => {
+  if (state.currentQuery) {
+    state.currentPage = 1;
+    state.currentOrder = orderSelect.value;
+    await doSearch();
+  }
 });
 
 prevPageBtn.addEventListener("click", async () => {
@@ -55,7 +67,7 @@ async function doSearch() {
 
   try {
     const response = await fetch(
-      `/api/search?q=${encodeURIComponent(state.currentQuery)}&page=${state.currentPage}`
+      `/api/search?q=${encodeURIComponent(state.currentQuery)}&page=${state.currentPage}&order=${state.currentOrder}`
     );
     if (!response.ok) {
       const payload = await response.json();

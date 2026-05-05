@@ -82,8 +82,12 @@ h1 {
 
 .search-bar {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 12px;
+}
+
+#search-order {
+  min-width: 120px;
 }
 
 input,
@@ -247,6 +251,10 @@ button:hover {
   .job-card {
     grid-template-columns: 1fr;
     flex-direction: column;
+  }
+
+  .search-bar {
+    grid-template-columns: 1fr;
   }
 
   .result-actions {
