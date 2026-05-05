@@ -239,14 +239,16 @@ def bilibili_search(keyword: str, page: int = 1, page_size: int = 12) -> dict:
                 )
             )
 
-        total = data.get("numResults", 0)
-        has_more = page * page_size < total
+        # B站 API 的 numResults 始终返回 1000，不可靠
+        # 改用实际返回结果数判断是否有更多数据
+        result_count = len(results)
+        has_more = result_count >= page_size
 
         return {
             "results": results,
             "page": page,
             "page_size": page_size,
-            "total": total,
+            "total": result_count,  # 显示当前页结果数，而非不可靠的总数
             "has_more": has_more,
         }
 

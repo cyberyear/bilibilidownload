@@ -67,8 +67,10 @@ async function doSearch() {
 
     if (data.results.length === 0) {
       searchStatus.textContent = "没有找到结果，请尝试其他关键词";
+    } else if (data.has_more) {
+      searchStatus.textContent = `当前第 ${data.page} 页，可继续翻页查看更多`;
     } else {
-      searchStatus.textContent = `找到 ${data.total} 条结果，当前第 ${data.page} 页`;
+      searchStatus.textContent = `当前第 ${data.page} 页，已显示全部结果`;
     }
 
     // 更新翻页控件
