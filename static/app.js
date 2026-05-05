@@ -23,8 +23,8 @@ const jobTemplate = document.getElementById("job-template");
 document.getElementById("search-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const query = queryInput.value.trim();
-  if (query.length < 2) {
-    searchStatus.textContent = "请输入至少 2 个字符。";
+  if (query.length < 1) {
+    searchStatus.textContent = "请输入搜索关键词。";
     return;
   }
 
@@ -114,12 +114,15 @@ function renderResults(items) {
     node.querySelector(".author").textContent = `UP 主: ${item.author || "未知"} | BV: ${item.bvid}`;
     node.querySelector(".description").textContent = item.description || "没有简介";
     node.querySelector(".duration").textContent = `时长: ${item.duration || "未知"}`;
-    node.querySelector("button").addEventListener("click", () => startDownload(item));
+    node.querySelector(".btn-video").addEventListener("click", () => startDownload(item, false));
+    node.querySelector(".btn-audio").addEventListener("click", () => startDownload(item, true));
     resultsContainer.appendChild(node);
   }
 }
 
-async function startDownload(item) {
+async function startDownload(item, audioOnly) {
+  console.log("startDownload called, audioOnly:", audioOnly, "item:", item.title);
+
   const outputDir = outputDirInput.value.trim();
   if (!outputDir) {
     alert("请先填写保存目录。");
@@ -132,7 +135,10 @@ async function startDownload(item) {
     output_dir: outputDir,
     file_name: fileNameInput.value.trim() || null,
     cookies_browser: browserSelect.value === "none" ? null : browserSelect.value,
+    audio_only: audioOnly,
   };
+
+  console.log("Sending payload:", payload);
 
   try {
     const response = await fetch("/api/download", {
@@ -145,10 +151,13 @@ async function startDownload(item) {
       throw new Error(data.detail || "创建下载任务失败");
     }
     const job = await response.json();
+    console.log("Job created:", job);
     await refreshJobs();
     beginPolling();
-    searchStatus.textContent = `已创建下载任务: ${job.title}`;
+    const formatText = audioOnly ? "音频" : "视频";
+    searchStatus.textContent = `已创建${formatText}下载任务: ${job.title}`;
   } catch (error) {
+    console.error("Download error:", error);
     alert(error.message);
   }
 }

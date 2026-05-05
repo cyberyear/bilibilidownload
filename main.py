@@ -100,6 +100,7 @@ class DownloadJob:
     output_dir: str
     file_name: str | None
     browser: str | None
+    audio_only: bool = False
     status: str = "queued"
     progress: str = "Waiting"
     percent: float = 0.0
@@ -127,6 +128,7 @@ class DownloadRequest(BaseModel):
     output_dir: str = Field(min_length=1)
     file_name: str | None = Field(default=None, max_length=200)
     cookies_browser: str | None = Field(default=None, max_length=20)
+    audio_only: bool = Field(default=False)
 
 
 class SearchResponse(BaseModel):
@@ -292,14 +294,25 @@ def build_ydl_options(job: DownloadJob) -> dict[str, Any]:
     target_dir.mkdir(parents=True, exist_ok=True)
 
     base_name = sanitize_filename(job.file_name or job.title)
+
     options: dict[str, Any] = {
         "outtmpl": str(target_dir / f"{base_name}.%(ext)s"),
-        "format": "bestvideo*+bestaudio/best",
-        "merge_output_format": "mp4",
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
     }
+
+    # 根据是否只下载音频选择不同格式
+    if job.audio_only:
+        options["format"] = "bestaudio/best"
+        options["postprocessors"] = [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        }]
+    else:
+        options["format"] = "bestvideo*+bestaudio/best"
+        options["merge_output_format"] = "mp4"
 
     if job.browser and job.browser != "none":
         options["cookiesfrombrowser"] = (job.browser,)
@@ -373,8 +386,8 @@ def index() -> str:
 @app.get("/api/search", response_model=SearchResponse)
 def search_videos(q: str, page: int = 1) -> SearchResponse:
     query = q.strip()
-    if len(query) < 2:
-        raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
+    if len(query) < 1:
+        raise HTTPException(status_code=400, detail="请输入搜索关键词")
     result = bilibili_search(query, page=page)
     return SearchResponse(
         results=result["results"],
@@ -403,6 +416,7 @@ def create_download(request: DownloadRequest) -> JobResponse:
             output_dir=str(output_dir),
             file_name=request.file_name.strip() if request.file_name else None,
             browser=request.cookies_browser,
+            audio_only=request.audio_only,
             created_order=job_counter,
         )
         jobs[job_id] = job
