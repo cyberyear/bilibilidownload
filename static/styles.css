@@ -153,6 +153,17 @@ button:hover {
   font-size: 1.02rem;
 }
 
+.title-link {
+  color: var(--text);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.title-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .result-meta,
 .result-actions {
   flex: 1;

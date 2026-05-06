@@ -124,7 +124,9 @@ function renderResults(items) {
 
   for (const item of items) {
     const node = resultTemplate.content.firstElementChild.cloneNode(true);
-    node.querySelector("h3").textContent = item.title;
+    const titleLink = node.querySelector(".title-link");
+    titleLink.textContent = item.title;
+    titleLink.href = item.url;
     node.querySelector(".author").textContent = `UP 主: ${item.author || "未知"} | BV: ${item.bvid}`;
     node.querySelector(".description").textContent = item.description || "没有简介";
     node.querySelector(".duration").textContent = `时长: ${item.duration || "未知"}`;
