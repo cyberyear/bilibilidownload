@@ -42,7 +42,11 @@
           <h2>下载配置</h2>
           <label class="field">
             <span>保存目录</span>
-            <input id="output-dir" type="text" value="downloads" />
+            <div class="dir-input-group">
+              <input id="output-dir" type="text" value="downloads" placeholder="输入目录路径或点击选择" />
+              <button type="button" id="select-dir-btn" class="btn-select-dir">选择文件夹</button>
+            </div>
+            <p class="hint">支持手动输入路径或点击按钮选择文件夹</p>
           </label>
           <label class="field">
             <span>自定义文件名</span>
@@ -92,12 +96,23 @@
           <h3></h3>
           <span class="badge"></span>
         </div>
-        <p class="muted progress"></p>
-        <p class="muted file"></p>
-        <p class="error"></p>
+        <div class="progress-bar-container">
+          <div class="progress-bar">
+            <div class="progress-bar-fill"></div>
+          </div>
+          <span class="progress-text"></span>
+        </div>
+        <div class="job-info">
+          <p class="muted progress"></p>
+          <p class="muted file"></p>
+          <p class="error"></p>
+        </div>
+        <div class="job-actions">
+          <button type="button" class="btn-delete">删除记录</button>
+        </div>
       </article>
     </template>
 
-    <script src="/static/app.js?v=3"></script>
+    <script src="/static/app.js?v=7"></script>
   </body>
   </html>

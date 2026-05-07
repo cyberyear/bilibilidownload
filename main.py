@@ -439,3 +439,12 @@ def list_jobs() -> list[JobResponse]:
     with jobs_lock:
         ordered = sorted(jobs.values(), key=lambda item: item.created_order, reverse=True)
     return [make_job_response(job) for job in ordered]
+
+
+@app.delete("/api/jobs/{job_id}")
+def delete_job(job_id: str) -> dict:
+    with jobs_lock:
+        if job_id not in jobs:
+            raise HTTPException(status_code=404, detail="任务不存在")
+        del jobs[job_id]
+    return {"message": "任务已删除"}

@@ -136,11 +136,17 @@ button:hover {
   margin-top: 18px;
 }
 
-.result-card,
-.job-card {
+.result-card {
   display: flex;
   justify-content: space-between;
   gap: 20px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.job-card {
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -202,11 +208,57 @@ button:hover {
   font-weight: 600;
 }
 
+.dir-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.dir-input-group input {
+  flex: 1;
+}
+
+.btn-select-dir {
+  padding: 14px 20px;
+  white-space: nowrap;
+  background: linear-gradient(135deg, #3498db 0%, #2980b9 100%) !important;
+  box-shadow: 0 8px 20px rgba(52, 152, 219, 0.25) !important;
+}
+
+.btn-select-dir:hover {
+  background: linear-gradient(135deg, #2980b9 0%, #2471a3 100%) !important;
+}
+
 .job-head {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+}
+
+.job-info {
+  margin-top: 8px;
+}
+
+.job-info p {
+  margin: 4px 0;
+  font-size: 0.9rem;
+}
+
+.job-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-delete {
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%) !important;
+  box-shadow: 0 4px 12px rgba(149, 165, 166, 0.3) !important;
+}
+
+.btn-delete:hover {
+  background: linear-gradient(135deg, #7f8c8d 0%, #6c7a7b 100%) !important;
 }
 
 .badge {
@@ -218,6 +270,17 @@ button:hover {
   font-weight: 700;
 }
 
+/* 不同状态的 badge 颜色 */
+.job-card[data-status="completed"] .badge {
+  background: rgba(45, 125, 70, 0.15);
+  color: var(--success);
+}
+
+.job-card[data-status="failed"] .badge {
+  background: rgba(181, 55, 47, 0.15);
+  color: var(--error);
+}
+
 .empty {
   place-items: center;
   min-height: 160px;
@@ -227,6 +290,86 @@ button:hover {
 
 .error {
   color: var(--error);
+}
+
+/* 进度条样式 */
+.progress-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 12px;
+  background: rgba(92, 68, 44, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--accent) 0%, #e74c3c 100%);
+  transition: width 0.3s ease;
+  position: relative;
+  min-width: 0;
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.progress-text {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  min-width: 45px;
+  text-align: right;
+}
+
+/* 不同状态的进度条颜色 */
+.job-card[data-status="downloading"] .progress-bar-fill {
+  background: linear-gradient(90deg, var(--accent) 0%, #e74c3c 100%);
+}
+
+.job-card[data-status="processing"] .progress-bar-fill {
+  background: linear-gradient(90deg, var(--warn) 0%, #f39c12 100%);
+}
+
+.job-card[data-status="completed"] .progress-bar-fill {
+  background: linear-gradient(90deg, var(--success) 0%, #2ecc71 100%);
+}
+
+.job-card[data-status="completed"] .progress-bar-fill::after {
+  animation: none;
+}
+
+.job-card[data-status="failed"] .progress-bar-fill {
+  background: var(--error);
+}
+
+.job-card[data-status="failed"] .progress-bar-fill::after {
+  animation: none;
 }
 
 .pagination {
@@ -258,8 +401,7 @@ button:hover {
 @media (max-width: 860px) {
   .panel-split,
   .search-bar,
-  .result-card,
-  .job-card {
+  .result-card {
     grid-template-columns: 1fr;
     flex-direction: column;
   }

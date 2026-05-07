@@ -10,6 +10,7 @@ const state = {
 const queryInput = document.getElementById("query");
 const orderSelect = document.getElementById("search-order");
 const outputDirInput = document.getElementById("output-dir");
+const selectDirBtn = document.getElementById("select-dir-btn");
 const fileNameInput = document.getElementById("file-name");
 const browserSelect = document.getElementById("cookies-browser");
 const searchStatus = document.getElementById("search-status");
@@ -21,6 +22,59 @@ const nextPageBtn = document.getElementById("next-page");
 const pageInfo = document.getElementById("page-info");
 const resultTemplate = document.getElementById("result-template");
 const jobTemplate = document.getElementById("job-template");
+
+// 文件夹选择功能
+selectDirBtn.addEventListener("click", async () => {
+  try {
+    // 使用 File System Access API（现代浏览器支持）
+    if ("showDirectoryPicker" in window) {
+      const dirHandle = await window.showDirectoryPicker({
+        mode: "readwrite",
+        startIn: "downloads",
+      });
+      // 获取完整路径
+      const path = await getDirectoryPath(dirHandle);
+      outputDirInput.value = path;
+    } else {
+      // 回退方案：使用 input[type=file] webkitdirectory
+      const input = document.createElement("input");
+      input.type = "file";
+      input.webkitdirectory = true;
+      input.addEventListener("change", (e) => {
+        if (e.target.files.length > 0) {
+          const file = e.target.files[0];
+          // 提取文件夹路径（去掉文件名）
+          const filePath = file.webkitRelativePath;
+          const dirPath = filePath.substring(0, filePath.lastIndexOf("/"));
+          outputDirInput.value = dirPath;
+        }
+      });
+      input.click();
+    }
+  } catch (err) {
+    if (err.name !== "AbortError") {
+      console.error("选择文件夹失败:", err);
+      alert("选择文件夹失败，请手动输入路径");
+    }
+  }
+});
+
+// 获取文件夹完整路径
+async function getDirectoryPath(dirHandle) {
+  // 尝试获取真实路径
+  try {
+    const path = await dirHandle.resolve();
+    // 如果能获取到路径，返回
+    if (path && path.length > 0) {
+      return path.join("/");
+    }
+  } catch (e) {
+    // 忽略错误
+  }
+
+  // 回退方案：使用文件夹名称
+  return dirHandle.name;
+}
 
 document.getElementById("search-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -197,12 +251,45 @@ function renderJobs(jobs) {
     const node = jobTemplate.content.firstElementChild.cloneNode(true);
     node.querySelector("h3").textContent = job.title;
     node.querySelector(".badge").textContent = job.status;
-    node.querySelector(".progress").textContent = `${job.progress} (${job.percent.toFixed(1)}%)`;
+
+    // 更新进度条
+    const progressBarFill = node.querySelector(".progress-bar-fill");
+    const progressText = node.querySelector(".progress-text");
+    progressBarFill.style.width = `${job.percent}%`;
+    progressText.textContent = `${job.percent.toFixed(1)}%`;
+
+    // 设置状态属性，用于 CSS 样式
+    node.setAttribute("data-status", job.status);
+
+    node.querySelector(".progress").textContent = job.progress;
     node.querySelector(".file").textContent = job.downloaded_path
       ? `文件: ${job.downloaded_path}`
       : `目录: ${job.output_dir}`;
     node.querySelector(".error").textContent = job.error || "";
+
+    // 删除按钮事件
+    const deleteBtn = node.querySelector(".btn-delete");
+    deleteBtn.addEventListener("click", async () => {
+      if (confirm("确定要删除这条下载记录吗？")) {
+        await deleteJob(job.id);
+      }
+    });
+
     jobsContainer.appendChild(node);
+  }
+}
+
+async function deleteJob(jobId) {
+  try {
+    const response = await fetch(`/api/jobs/${jobId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      throw new Error("删除失败");
+    }
+    await refreshJobs();
+  } catch (error) {
+    alert("删除任务失败: " + error.message);
   }
 }
 
